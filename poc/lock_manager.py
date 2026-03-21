@@ -12,8 +12,8 @@ class LockManager:
     """Gerencia a concorrência espacial no grid, evitando colisões de veículos."""
 
     def __init__(self, rows: int, cols: int) -> None:
-        self.rows = rows
-        self.cols = cols
+        self.rows: int = rows
+        self.cols: int = cols
         
         # Uma trava (Lock) exclusiva por coordenada do mapa
         self.locks: List[List[threading.Lock]] = [
@@ -64,8 +64,8 @@ class Relogio(threading.Thread):
 
     def __init__(self) -> None:
         super().__init__(daemon=True)
-        self.em_execucao = False
-        self.tick_event = threading.Event()
+        self.em_execucao: bool = False
+        self.tick_event: threading.Event = threading.Event()
 
     def run(self) -> None:
         pass  # TODO: loop principal de emissão de ticks
@@ -82,9 +82,9 @@ class Semaforo:
     """
 
     def __init__(self, cruzamento_id: int) -> None:
-        self.cruzamento_id = cruzamento_id
-        self.estado_aberto = False
-        self.condicao = threading.Condition(threading.Lock())
+        self.cruzamento_id: int = cruzamento_id
+        self.estado_aberto: bool = False
+        self.condicao: threading.Condition = threading.Condition(threading.Lock())
 
     def abrir(self) -> None:
         """Sinaliza 'verde' e desperta imediatamente todos os veículos em espera."""

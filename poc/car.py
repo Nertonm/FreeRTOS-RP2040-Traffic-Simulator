@@ -1,12 +1,11 @@
 import threading
 import random
-from typing import Tuple, Optional, Dict
+from typing import Tuple, Optional, Dict, TYPE_CHECKING
 
 # Importando as direções do grid para o carro saber para onde virar
 from grid import Direcao 
 
 # Evitando import circular
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from grid import Grid
     from lock_manager import LockManager, Relogio, Semaforo
@@ -19,7 +18,7 @@ class Car(threading.Thread):
         Thread de um veículo básico. Navega pelo grid respeitando os ticks do relógio, 
         a mão das vias, os sinais e os locks de concorrência.
         """
-        super().__init__()
+        super().__init__(daemon=True)
         self.id_carro: int = id_carro
         self.velocidade: int = velocidade
         self.posicao_atual: Tuple[int, int] = posicao_inicial
@@ -29,7 +28,9 @@ class Car(threading.Thread):
         self.lock_manager: 'LockManager' = lock_manager
         
         self.relogio: 'Relogio' = relogio
-        self.dicionario_semaforos = dicionario_semaforos
+        self.dicionario_semaforos: Dict[int, 'Semaforo'] = dicionario_semaforos
+        
+        self.ultima_posicao_no_cruzamento = None
         
         self.em_execucao: bool = False
         self.ticks_acumulados: int = 0
@@ -39,10 +40,16 @@ class Car(threading.Thread):
         Loop de vida do veículo. Controla o momento exato de andar com base na velocidade.
         """
         self.em_execucao = True
+        nasceu = False
         
         # TENTA NASCER: Espera até a célula de spawn estar livre
-        while self.em_execucao and not self.lock_manager.adquirir_celula(*self.posicao_atual):
-            self.relogio.esperar_tick()
+        while self.em_execucao and not nasceu:
+            nasceu = self.lock_manager.adquirir_celula(*self.posicao_atual)
+            if not nasceu:
+                self.relogio.esperar_tick()
+
+        if not nasceu:
+            return
 
         while self.em_execucao:
             self.relogio.esperar_tick()
@@ -57,7 +64,8 @@ class Car(threading.Thread):
                     self.ticks_acumulados = 0
 
         # Encerrou a simulação ou saiu do mapa. Libera a vaga que estava ocupando.
-        self.lock_manager.liberar_celula(*self.posicao_atual)
+        if nasceu:
+            self.lock_manager.liberar_celula(*self.posicao_atual)
 
     def mover(self) -> bool:
         """
@@ -93,6 +101,16 @@ class Car(threading.Thread):
             
         return False # Não conseguiu pegar o lock (tem carro na frente)
 
+    def calcular_pos_com(self, direcao: Direcao) -> Tuple[int, int]:
+        y, x = self.posicao_atual
+
+        if direcao == Direcao.NORTE: return y - 1, x
+        if direcao == Direcao.SUL: return y + 1, x
+        if direcao == Direcao.LESTE: return y, x + 1
+        if direcao == Direcao.OESTE: return y, x - 1
+        
+        raise ValueError(f"Direção inválida: {direcao}")
+
     def definir_direcao_cruzamento(self) -> None:
         """
         Se estiver em um cruzamento, escolhe uma nova direção permitida para virar.
@@ -102,24 +120,36 @@ class Car(threading.Thread):
         
         # Só muda de direção se estiver pisando em um '[]' (cruzamento)
         if celula_atual and celula_atual.is_cruzamento:
-            # Mapeamento do "caminho de volta" para evitar retorno
-            direcao_reversa = {
-                Direcao.NORTE: Direcao.SUL,
-                Direcao.SUL: Direcao.NORTE,
-                Direcao.LESTE: Direcao.OESTE,
-                Direcao.OESTE: Direcao.LESTE
-            }.get(self.direcao_atual, Direcao.NENHUMA)
-
-            direcoes_possiveis = [Direcao.NORTE, Direcao.SUL, Direcao.LESTE, Direcao.OESTE]
-            opcoes_validas = []
-
-            for direcao in direcoes_possiveis:
-                # O carro pode ir para qualquer lado permitido pelo cruzamento, MENOS dar ré
-                if celula_atual.aceita_direcao(direcao) and direcao != direcao_reversa:
-                    opcoes_validas.append(direcao)
-            
-            if opcoes_validas:
-                self.direcao_atual = random.choice(opcoes_validas)
+            if self.posicao_atual != self.ultima_posicao_no_cruzamento:
+                # Mapeamento do "caminho de volta" para evitar retorno
+                direcao_reversa = {
+                    Direcao.NORTE: Direcao.SUL,
+                    Direcao.SUL: Direcao.NORTE,
+                    Direcao.LESTE: Direcao.OESTE,
+                    Direcao.OESTE: Direcao.LESTE
+                }.get(self.direcao_atual)
+    
+                direcoes_possiveis = [Direcao.NORTE, Direcao.SUL, Direcao.LESTE, Direcao.OESTE]
+                opcoes_validas = []
+    
+                for direcao in direcoes_possiveis:
+                    if direcao == direcao_reversa:
+                        continue
+                        
+                    # O carro pode ir para qualquer lado permitido pelo cruzamento, MENOS dar ré
+                    if celula_atual.aceita_direcao(direcao):
+                        prox_y, prox_x = self.calcular_pos_com(direcao)
+                        celula_viz = self.grid.obter_celula(prox_y, prox_x)
+                        
+                        if celula_viz and celula_viz.aceita_direcao(direcao):
+                            opcoes_validas.append(direcao)
+                
+                if opcoes_validas:
+                    self.direcao_atual = random.choice(opcoes_validas)
+                    
+                self.ultima_posicao_no_cruzamento = self.posicao_atual
+        else:
+            self.ultima_posicao_no_cruzamento = None
 
     def verificar_semaforo(self, prox_y: int, prox_x: int) -> None:
         """
@@ -154,4 +184,4 @@ class Car(threading.Thread):
         if self.direcao_atual == Direcao.LESTE: return y, x + 1
         if self.direcao_atual == Direcao.OESTE: return y, x - 1
 
-        return y, x
+        raise ValueError(f"Direção inválida: {self.direcao_atual}")
