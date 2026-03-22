@@ -154,13 +154,21 @@ class Car(threading.Thread):
     def verificar_semaforo(self, prox_y: int, prox_x: int) -> None:
         """
         Pausa a thread do veículo caso a próxima casa tenha um semáforo fechado.
+        Carros LESTE/OESTE consultam o semáforo H (id original).
+        Carros NORTE/SUL consultam o semáforo V (id + 16).
         """
-        id_semaforo = self.grid.obter_id_semaforo(prox_y, prox_x)
+        h_id = self.grid.obter_id_semaforo(prox_y, prox_x)
+        if h_id < 0:
+            return
 
-        if id_semaforo >= 0:
-            semaforo = self.dicionario_semaforos.get(id_semaforo)
-            if semaforo:
-                semaforo.esperar_verde()
+        if self.direcao_atual in (Direcao.LESTE, Direcao.OESTE):
+            id_semaforo = h_id
+        else:
+            id_semaforo = h_id + 16
+
+        semaforo = self.dicionario_semaforos.get(id_semaforo)
+        if semaforo:
+            semaforo.esperar_verde()
 
     def pode_mover_para(self, y: int, x: int) -> bool:
         """
