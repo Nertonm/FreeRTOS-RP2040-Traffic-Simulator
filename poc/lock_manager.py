@@ -1,7 +1,7 @@
 import logging
 import threading
 import time
-from typing import List, Tuple, TYPE_CHECKING
+from typing import Dict, List, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from grid import Grid
@@ -125,3 +125,50 @@ class Semaforo:
         with self.condicao:
             while not self.estado_aberto:
                 self.condicao.wait()
+
+
+class ControladorSemaforo(threading.Thread):
+    """
+    Thread que alterna os semáforos entre fase horizontal e fase vertical
+    a cada ticks_fase ticks do relógio global.
+
+    IDs 0-15  → semáforos do fluxo horizontal (LESTE/OESTE)
+    IDs 16-31 → semáforos do fluxo vertical   (NORTE/SUL)
+
+    A simulação começa com a fase H ativa (H=verde, V=vermelho).
+    """
+
+    def __init__(
+        self,
+        semaforos: Dict[int, "Semaforo"],
+        relogio: "Relogio",
+        ticks_fase: int = 8,
+    ) -> None:
+        super().__init__(daemon=True)
+        self.relogio = relogio
+        self.ticks_fase = ticks_fase
+        self.em_execucao = False
+
+        self._fase_h: List["Semaforo"] = [s for sid, s in semaforos.items() if sid < 16]
+        self._fase_v: List["Semaforo"] = [s for sid, s in semaforos.items() if sid >= 16]
+
+    def run(self) -> None:
+        self.em_execucao = True
+        contador = 0
+        fase_h_ativa = True  # começa com H aberto, consistente com criar_semaforos
+        while self.em_execucao:
+            self.relogio.esperar_tick()
+            contador += 1
+            if contador >= self.ticks_fase:
+                contador = 0
+                fase_h_ativa = not fase_h_ativa
+                if fase_h_ativa:
+                    for s in self._fase_v:
+                        s.fechar()
+                    for s in self._fase_h:
+                        s.abrir()
+                else:
+                    for s in self._fase_h:
+                        s.fechar()
+                    for s in self._fase_v:
+                        s.abrir()
