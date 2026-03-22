@@ -1,5 +1,6 @@
 import logging
 import threading
+import time
 from typing import List, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -59,19 +60,31 @@ class LockManager:
         return True
 
 
+TICK_DURATION: float = 0.2  # segundos por tick
+
 class Relogio(threading.Thread):
     """Provedor do tempo global da simulação."""
 
     def __init__(self) -> None:
         super().__init__(daemon=True)
         self.em_execucao: bool = False
-        self.tick_event: threading.Event = threading.Event()
+        self._condicao: threading.Condition = threading.Condition(threading.Lock())
+        self._tick_numero: int = 0
 
     def run(self) -> None:
-        pass  # TODO: loop principal de emissão de ticks
+        self.em_execucao = True
+        while self.em_execucao:
+            time.sleep(TICK_DURATION)
+            with self._condicao:
+                self._tick_numero += 1
+                self._condicao.notify_all()
 
     def esperar_tick(self) -> None:
-        pass  # TODO: sincronia para as demais threads
+        """Bloqueia a thread chamadora até o próximo tick do relógio global."""
+        with self._condicao:
+            tick_atual = self._tick_numero
+            while self._tick_numero == tick_atual:
+                self._condicao.wait()
 
 
 class Semaforo:
