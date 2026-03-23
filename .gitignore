@@ -1,48 +1,39 @@
-# Prerequisites
+# ------------------------
+# C/C++ and toolchain
+# ------------------------
 *.d
-
-# Object files
 *.o
 *.ko
 *.obj
 *.elf
-
-# Linker output
 *.ilk
 *.map
 *.exp
-
-# Precompiled Headers
 *.gch
 *.pch
-
-# Libraries
 *.lib
 *.a
 *.la
 *.lo
-
-# Shared objects (inc. Windows DLLs)
 *.dll
 *.so
 *.so.*
 *.dylib
-
-# Executables
 *.exe
 *.out
 *.app
 *.i*86
 *.x86_64
 *.hex
-
-# Debug files
 *.dSYM/
 *.su
 *.idb
 *.pdb
+*.dwo
 
-# Kernel Module Compile Results
+# ------------------------
+# Linux kernel leftovers
+# ------------------------
 *.mod*
 *.cmd
 .tmp_versions/
@@ -51,6 +42,46 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-# debug information files
-*.dwo
+# ------------------------
+# CMake / build folders
+# ------------------------
+build/
+build-*/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+compile_commands.json
+cmake_install.cmake
+Makefile
+
+# Project-specific generated folders
+**/build/
+**/build_stale_*/
+
+# RP2040 artifacts
+*.uf2
+*.bin
+*.dis
+
+# ------------------------
+# Python (POC)
+# ------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.venv/
+venv/
+env/
+
+# IDE/editor noise
+.DS_Store
+
+# Local notes / planning files
 planjeamento
