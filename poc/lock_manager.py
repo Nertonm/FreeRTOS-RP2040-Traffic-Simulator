@@ -1,6 +1,7 @@
 import logging
 import threading
-from typing import List, Tuple, TYPE_CHECKING
+import time
+from typing import Dict, List, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from grid import Grid
@@ -59,19 +60,31 @@ class LockManager:
         return True
 
 
+TICK_DURATION: float = 0.2  # segundos por tick
+
 class Relogio(threading.Thread):
     """Provedor do tempo global da simulação."""
 
     def __init__(self) -> None:
         super().__init__(daemon=True)
         self.em_execucao: bool = False
-        self.tick_event: threading.Event = threading.Event()
+        self._condicao: threading.Condition = threading.Condition(threading.Lock())
+        self._tick_numero: int = 0
 
     def run(self) -> None:
-        pass  # TODO: loop principal de emissão de ticks
+        self.em_execucao = True
+        while self.em_execucao:
+            time.sleep(TICK_DURATION)
+            with self._condicao:
+                self._tick_numero += 1
+                self._condicao.notify_all()
 
     def esperar_tick(self) -> None:
-        pass  # TODO: sincronia para as demais threads
+        """Bloqueia a thread chamadora até o próximo tick do relógio global."""
+        with self._condicao:
+            tick_atual = self._tick_numero
+            while self._tick_numero == tick_atual:
+                self._condicao.wait()
 
 
 class Semaforo:
@@ -112,3 +125,50 @@ class Semaforo:
         with self.condicao:
             while not self.estado_aberto:
                 self.condicao.wait()
+
+
+class ControladorSemaforo(threading.Thread):
+    """
+    Thread que alterna os semáforos entre fase horizontal e fase vertical
+    a cada ticks_fase ticks do relógio global.
+
+    IDs 0-15  → semáforos do fluxo horizontal (LESTE/OESTE)
+    IDs 16-31 → semáforos do fluxo vertical   (NORTE/SUL)
+
+    A simulação começa com a fase H ativa (H=verde, V=vermelho).
+    """
+
+    def __init__(
+        self,
+        semaforos: Dict[int, "Semaforo"],
+        relogio: "Relogio",
+        ticks_fase: int = 8,
+    ) -> None:
+        super().__init__(daemon=True)
+        self.relogio = relogio
+        self.ticks_fase = ticks_fase
+        self.em_execucao = False
+
+        self._fase_h: List["Semaforo"] = [s for sid, s in semaforos.items() if sid < 16]
+        self._fase_v: List["Semaforo"] = [s for sid, s in semaforos.items() if sid >= 16]
+
+    def run(self) -> None:
+        self.em_execucao = True
+        contador = 0
+        fase_h_ativa = True  # começa com H aberto, consistente com criar_semaforos
+        while self.em_execucao:
+            self.relogio.esperar_tick()
+            contador += 1
+            if contador >= self.ticks_fase:
+                contador = 0
+                fase_h_ativa = not fase_h_ativa
+                if fase_h_ativa:
+                    for s in self._fase_v:
+                        s.fechar()
+                    for s in self._fase_h:
+                        s.abrir()
+                else:
+                    for s in self._fase_h:
+                        s.fechar()
+                    for s in self._fase_v:
+                        s.abrir()
