@@ -53,9 +53,13 @@ class Ambulance(Car):
             # Achamos um semáforo no alcance do radar!
             id_semaforo = celula_alvo.light_id
             if id_semaforo >= 0:
-                semaforo = self.dicionario_semaforos.get(id_semaforo)
+                if self.direcao_atual in (Direcao.LESTE, Direcao.OESTE):
+                    semaforo = self.dicionario_semaforos.get(id_semaforo)
+                else:
+                    semaforo = self.dicionario_semaforos.get(id_semaforo + 16)
+
                 if semaforo:
-                    # Grita para o semáforo abrir e acorda todos os carros da fila
+                    # Força somente a fase correspondente ao eixo da ambulância
                     semaforo.forcar_verde()
                 break # Já abriu o sinal, o radar cumpriu seu papel
                 

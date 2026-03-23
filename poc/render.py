@@ -72,11 +72,12 @@ class Renderer(ABC):
         """
         from ambulance import Ambulance
 
-        posicoes_veiculos: Dict[tuple, str] = {
-            v.posicao_atual: "A " if isinstance(v, Ambulance) else "C "
-            for v in self.veiculos
-            if v.em_execucao
-        }
+        # Evita race condition: leia `posicao_atual` apenas uma vez por veículo
+        posicoes_veiculos: Dict[tuple, str] = {}
+        for v in self.veiculos:
+            if v.em_execucao:
+                pos = v.posicao_atual
+                posicoes_veiculos[pos] = "A " if isinstance(v, Ambulance) else "C "
 
         linhas: List[str] = []
         for y in range(self.grid.rows):
@@ -90,8 +91,11 @@ class Renderer(ABC):
                 if (y, x) in posicoes_veiculos:
                     linha += posicoes_veiculos[(y, x)]
                 elif celula.is_cruzamento and celula.has_semaforo:
-                    semaforo = self.semaforos.get(celula.light_id)
-                    linha += ("G " if semaforo.estado_aberto else "R ") if semaforo else "+ "
+                    # Mostrar verde se qualquer fase (H ou V) estiver aberta
+                    sem_h = self.semaforos.get(celula.light_id)
+                    sem_v = self.semaforos.get(celula.light_id + 16)
+                    aberto = (sem_h and sem_h.estado_aberto) or (sem_v and sem_v.estado_aberto)
+                    linha += ("G " if aberto else "R ") if (sem_h or sem_v) else "+ "
                 else:
                     linha += _MAPA_VISUAL.get(celula.visual, "  ")
 
@@ -214,10 +218,19 @@ class CursesRenderer(Renderer):
                     texto = "A " if pair == 6 else "C "
                     attr = curses.color_pair(pair) | curses.A_BOLD
                 elif celula.is_cruzamento and celula.has_semaforo:
-                    semaforo = self.semaforos.get(celula.light_id)
-                    aberto = semaforo.estado_aberto if semaforo else False
-                    texto = "G " if aberto else "R "
-                    attr = curses.color_pair(1 if aberto else 2) | curses.A_BOLD
+                    # Mostra H (fase horizontal) ou V (fase vertical) quando possível;
+                    # caso contrário, mostra R se ambos fechados.
+                    sem_h = self.semaforos.get(celula.light_id)
+                    sem_v = self.semaforos.get(celula.light_id + 16)
+                    if sem_h and sem_h.estado_aberto:
+                        texto = "H "
+                        attr = curses.color_pair(1) | curses.A_BOLD
+                    elif sem_v and sem_v.estado_aberto:
+                        texto = "V "
+                        attr = curses.color_pair(1) | curses.A_BOLD
+                    else:
+                        texto = "R "
+                        attr = curses.color_pair(2) | curses.A_BOLD
                 else:
                     texto = _MAPA_VISUAL.get(celula.visual, "  ")
                     attr = curses.color_pair(_par_via(celula.visual))

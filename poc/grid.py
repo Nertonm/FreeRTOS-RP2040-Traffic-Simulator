@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict, Tuple, NamedTuple
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import IntFlag, IntEnum
 
 # ENUMS (Tipos Alto Nível)
@@ -74,7 +74,7 @@ MAPA_CRATO = [
     ["##", "<<", "[]", "<<", "<<", "[]", "<<", "##"],  # R4: Av. Hermes Parahyba ←
     ["##", "##", "||", "##", "##", "||", "##", "##"],  # R5
     ["##", "==", "[]", "==", "==", "[]", "==", "##"],  # R6: Av. Dr. Irineu Pinheiro ↔
-    ["##", "##", "vv", "##", "##", "vv", "##", "##"],  # R7
+    ["##", "##", "||", "##", "##", "||", "##", "##"],  # R7 (junção com Juazeiro)
 ]
 
 SEMAFOROS_CRATO: Dict[Tuple[int, int], IdSemaforo] = {
@@ -90,14 +90,14 @@ SEMAFOROS_CRATO: Dict[Tuple[int, int], IdSemaforo] = {
 
 # MAPA: JUAZEIRO DO NORTE
 MAPA_JUAZEIRO = [
-    ["##", "##", "^^", "##", "##", "^^", "##", "##"],  # R0
+    ["##", "##", "||", "##", "##", "||", "##", "##"],  # R0 (junção com Crato)
     ["##", "##", "||", "##", "##", "||", "##", "##"],  # R1
     [">>", ">>", "[]", ">>", ">>", "[]", ">>", "##"],  # R2: Av. Castelo Branco ->
     ["##", "##", "||", "##", "##", "||", "##", "##"],  # R3
     ["##", "<<", "[]", "<<", "<<", "[]", "<<", "##"],  # R4: Rua Padre Cícero <-
     ["##", "##", "||", "##", "##", "||", "##", "##"],  # R5
     ["##", "==", "[]", "==", "==", "[]", "==", "##"],  # R6: Av. Virgílio Távora <->
-    ["##", "##", "vv", "##", "##", "vv", "##", "##"],  # R7
+    ["##", "##", "||", "##", "##", "||", "##", "##"],  # R7 (junção com Barbalha)
 ]
 
 SEMAFOROS_JUAZEIRO: Dict[Tuple[int, int], IdSemaforo] = {
@@ -113,7 +113,7 @@ SEMAFOROS_JUAZEIRO: Dict[Tuple[int, int], IdSemaforo] = {
 
 # MAPA: BARBALHA
 MAPA_BARBALHA = [
-    ["##", "##", "^^", "##", "##", "^^", "##", "##"],  # R0
+    ["##", "##", "||", "##", "##", "||", "##", "##"],  # R0 (junção com Juazeiro)
     ["##", "##", "||", "##", "##", "||", "##", "##"],  # R1
     ["##", ">>", "[]", ">>", ">>", "[]", ">>", "##"],  # R2: Rua Santos Dumont ->
     ["##", "##", "||", "##", "##", "||", "##", "##"],  # R3
@@ -166,7 +166,6 @@ SPAWN_POINTS: List[Spawn] = [
 class Celula:
     visual: str
     light_id: int = -1
-    ocupante: Optional[object] = field(default=None, repr=False)
 
     @property
     def direcoes_permitidas(self) -> Direcao:
@@ -230,14 +229,23 @@ class Grid:
                 return self.matriz[y][x]
         return None
 
-    def is_ocupada(self, y: int, x: int) -> bool:
-        celula = self.obter_celula(y, x)
-        return celula is not None and celula.ocupante is not None
-
     def obter_id_semaforo(self, y: int, x: int) -> int:
         celula = self.obter_celula(y, x)
         return celula.light_id if celula else -1
 
     def transpor_placa(self, carro: object) -> None:
-        """Ação especial ao passar pelo final do mundo de Barbalha."""
-        pass
+        """Reposiciona o veículo para a primeira linha da malha na mesma coluna, se possível."""
+        posicao = getattr(carro, "posicao_atual", None)
+        direcao = getattr(carro, "direcao_atual", None)
+        if not posicao or direcao is None:
+            return
+
+        y_atual, x_atual = posicao
+
+        # Só transpõe ao sair do limite inferior (fim de Barbalha) andando para SUL
+        if y_atual < self.rows - 1 or direcao != Direcao.SUL:
+            return
+
+        destino = self.obter_celula(0, x_atual)
+        if destino and not destino.is_parede and destino.aceita_direcao(direcao):
+            carro.posicao_atual = (0, x_atual)

@@ -1,7 +1,7 @@
 import logging
 import threading
 import time
-from typing import Dict, List, Tuple, TYPE_CHECKING
+from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from grid import Grid
@@ -21,6 +21,10 @@ class LockManager:
             [threading.Lock() for _ in range(cols)]
             for _ in range(rows)
         ]
+        self.lock_owners: List[List[Optional[int]]] = [
+            [None for _ in range(cols)]
+            for _ in range(rows)
+        ]
 
     def _verificar_limites(self, row: int, col: int) -> None:
         """Garante que a coordenada (row, col) pertence ao grid."""
@@ -30,12 +34,33 @@ class LockManager:
     def adquirir_celula(self, row: int, col: int) -> bool:
         """Tenta reservar a célula informada. Retorna True se reservada, False se ocupada."""
         self._verificar_limites(row, col)
-        return self.locks[row][col].acquire(blocking=False)
+        adquirido = self.locks[row][col].acquire(blocking=False)
+        if adquirido:
+            self.lock_owners[row][col] = threading.get_ident()
+        return adquirido
 
     def liberar_celula(self, row: int, col: int) -> None:
         """Devolve o controle da célula para que outro veículo possa ocupar."""
         self._verificar_limites(row, col)
-        self.locks[row][col].release()
+        lock = self.locks[row][col]
+        dono = self.lock_owners[row][col]
+        atual = threading.get_ident()
+
+        if dono is not None and dono != atual:
+            logger.error(
+                "Thread %d tentou liberar célula (%d, %d) pertencente à thread %d.",
+                atual,
+                row,
+                col,
+                dono,
+            )
+            return
+
+        if lock.locked():
+            lock.release()
+            self.lock_owners[row][col] = None
+        else:
+            logger.warning("Tentativa de liberar célula já livre em (%d, %d).", row, col)
 
     def adquirir_multiplas_celulas(self, posicoes: List[Tuple[int, int]]) -> bool:
         """
@@ -79,11 +104,17 @@ class Relogio(threading.Thread):
                 self._tick_numero += 1
                 self._condicao.notify_all()
 
+    def parar(self) -> None:
+        """Encerra o relógio e acorda todas as threads aguardando tick."""
+        with self._condicao:
+            self.em_execucao = False
+            self._condicao.notify_all()
+
     def esperar_tick(self) -> None:
         """Bloqueia a thread chamadora até o próximo tick do relógio global."""
         with self._condicao:
             tick_atual = self._tick_numero
-            while self._tick_numero == tick_atual:
+            while self.em_execucao and self._tick_numero == tick_atual:
                 self._condicao.wait()
 
 
@@ -97,6 +128,7 @@ class Semaforo:
     def __init__(self, cruzamento_id: int) -> None:
         self.cruzamento_id: int = cruzamento_id
         self.estado_aberto: bool = False
+        self._encerrado: bool = False
         self.condicao: threading.Condition = threading.Condition(threading.Lock())
 
     def abrir(self) -> None:
@@ -117,13 +149,20 @@ class Semaforo:
             self.estado_aberto = True
             self.condicao.notify_all()
 
+    def encerrar(self) -> None:
+        """Desbloqueia filas em espera durante o shutdown da simulação."""
+        with self.condicao:
+            self._encerrado = True
+            self.estado_aberto = True
+            self.condicao.notify_all()
+
     def esperar_verde(self) -> None:
         """
         Bloqueia a execução de um veículo enquanto o semáforo estiver vermelho.
         A thread é efetivamente pausada, poupando CPU.
         """
         with self.condicao:
-            while not self.estado_aberto:
+            while not self.estado_aberto and not self._encerrado:
                 self.condicao.wait()
 
 

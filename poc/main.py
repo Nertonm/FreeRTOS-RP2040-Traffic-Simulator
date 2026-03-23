@@ -92,11 +92,16 @@ def iniciar_simulacao(
 def encerrar_simulacao(
     relogio: Relogio,
     veiculos: List[Union[Car, Ambulance]],
+    semaforos: Dict[int, Semaforo],
 ) -> None:
     """Sinaliza encerramento para todas as threads em execução."""
-    relogio.em_execucao = False
+    for semaforo in semaforos.values():
+        semaforo.encerrar()
+
     for veiculo in veiculos:
         veiculo.em_execucao = False
+
+    relogio.parar()
 
 
 if __name__ == "__main__":
@@ -130,4 +135,4 @@ if __name__ == "__main__":
         renderer.loop()
     except KeyboardInterrupt:
         controlador.em_execucao = False
-        encerrar_simulacao(relogio, veiculos)
+        encerrar_simulacao(relogio, veiculos, semaforos)
