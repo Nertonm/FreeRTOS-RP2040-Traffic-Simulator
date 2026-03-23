@@ -19,7 +19,7 @@ _MAPA_VISUAL: Dict[str, str] = {
     "==": "--",
     ">>": ">>",
     "<<": "<<",
-    "^^": "^^ ",
+    "^^": "^^",
     "vv": "vv",
     "[]": "+ ",  # cruzamento sem semáforo
 }
@@ -75,6 +75,7 @@ class Renderer(ABC):
         posicoes_veiculos: Dict[tuple, str] = {
             v.posicao_atual: "A " if isinstance(v, Ambulance) else "C "
             for v in self.veiculos
+            if v.em_execucao
         }
 
         linhas: List[str] = []
@@ -198,6 +199,7 @@ class CursesRenderer(Renderer):
 
         posicoes: Dict[tuple, int] = {
             v.posicao_atual: v.id_carro for v in self.veiculos
+            if v.em_execucao
         }
 
         for y in range(self.grid.rows):

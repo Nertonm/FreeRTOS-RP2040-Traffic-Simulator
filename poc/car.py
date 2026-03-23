@@ -78,10 +78,9 @@ class Car(threading.Thread):
         prox_y, prox_x = self.calcular_proxima_posicao()
 
         # Validação física: Parede, contramão ou fim de mapa?
+        # Em qualquer caso, a via termina aqui — o carro encerra a viagem.
         if not self.pode_mover_para(prox_y, prox_x):
-            # Se for None, tentou sair do mapa. O carro encerra a viagem.
-            if self.grid.obter_celula(prox_y, prox_x) is None:
-                self.em_execucao = False
+            self.em_execucao = False
             return False
 
         # Respeitar Sinal: Se estiver vermelho, a thread vai dormir aqui dentro
@@ -98,8 +97,12 @@ class Car(threading.Thread):
             # Libera a rua de trás em segurança
             self.lock_manager.liberar_celula(y_antigo, x_antigo)
             return True
-            
-        return False # Não conseguiu pegar o lock (tem carro na frente)
+
+        # Célula ocupada — se estiver num cruzamento, permite reavaliação de direção no próximo tick
+        celula_atual = self.grid.obter_celula(*self.posicao_atual)
+        if celula_atual and celula_atual.is_cruzamento:
+            self.ultima_posicao_no_cruzamento = None
+        return False
 
     def calcular_pos_com(self, direcao: Direcao) -> Tuple[int, int]:
         y, x = self.posicao_atual
