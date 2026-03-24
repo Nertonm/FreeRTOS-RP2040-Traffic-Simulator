@@ -1,0 +1,32 @@
+.program ws2812
+.side_set 1
+
+.wrap_target
+    out x, 1        side 0 [2] ; Instr 0
+    jmp !x, 3       side 1 [1] ; Instr 1
+    jmp 0           side 1 [4] ; Instr 2
+    nop             side 0 [4] ; Instr 3
+.wrap 
+
+% c-sdk {
+#include "hardware/clocks.h"
+
+static inline void ws2812_program_init(PIO pio, uint sm, uint offset, uint pin, float freq, bool rgbw) {
+    pio_gpio_init(pio, pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, true);
+
+    pio_sm_config c = ws2812_program_get_default_config(offset);
+    sm_config_set_sideset_pins(&c, pin);
+    
+    // Configura para transferências de 24 bits (G, R, B empacotados), MSB first
+    sm_config_set_out_shift(&c, false, true, 24); 
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+
+    // 10 ciclos por bit (conforme programa acima)
+    float div = clock_get_hz(clk_sys) / (10.0f * freq);
+    sm_config_set_clkdiv(&c, div);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
